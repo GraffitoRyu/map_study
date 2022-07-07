@@ -159,7 +159,7 @@
             // https://github.com/southkorea/southkorea-maps
             // urn:ogc:def:crs:OGC:1.3:CRS84
             // WGS84, EPSG:4326(GPS 좌표계), UTF-8
-            return fetch(`/map_study/json/geojson/skorea-${type}-2018-geo.json`)
+            return fetch(`/json/geojson/skorea-${type}-2018-geo.json`)
                 .then(res => res.json())
                 .then(d => {
                     for (let i = 0; i < d.features.length; i++) {
