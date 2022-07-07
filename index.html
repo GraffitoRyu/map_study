@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Document</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- 좌표계 호환을 위한 라이브러리 -->
+    <!-- proj4 js-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.min.js"></script>
+    <!-- // proj4 js -->
+
+
+    <!-- leaflet js -->
+    <!-- Make sure you put this AFTER Leaflet's CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.8.0/dist/leaflet.css" integrity="sha512-hoalWLoI8r4UszCkZ5kL8vayOGVae1oxXe/2A4AO6J9+580uKHDO3JdHb7NzwwzK5xr/Fs0W40kiNHxM9vyTtQ==" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.8.0/dist/leaflet.js" integrity="sha512-BB3hKbKWOc9Ez/TAwyWxNXeoV9c1v6FIeYiBieIWkpLjauysF18NzgR1MBNBXf8/KABdlkX68nAhlwcDFLGPCQ==" crossorigin=""></script>
+    <!-- // leaflet js -->
+
+    <!-- <script src="/vendor/proj4leaflet/proj4-compressed.js"></script>
+    <script src="/vendor/proj4leaflet/proj4leaflet.js"></script>
+    <script src="/vendor/proj4leaflet/Leaflet.KoreanTmsProviders.js"></script> -->
+
+
+    <!-- open layers js -->
+    <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.14.1/css/ol.css" type="text/css">
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.14.1/build/ol.js"></script> -->
+    <!-- // open layers js -->
+    
+    <!-- 국토정보플랫폼 오픈 API -->
+    <!-- <script type="text/javascript" src="http://map.ngii.go.kr/openapi/wmts_ngiiMap_v6.4.3.js?apikey=API키"></script> -->
+    <!-- // 국토정보플랫폼 오픈 API -->
+
+    <style>
+        * {margin:0; padding:0; box-sizing:border-box;}
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        .map-container {
+            width: 480px;
+            height: 324px;
+            border:1px solid #dfdfdf;
+            background: white;
+        }
+        .select-location {
+            position:relative;
+            display:inline-flex;
+            margin-bottom:50px;
+        }
+        .select-location h2 {
+            font-size:14px;
+            height:30px;
+            display:flex;
+            align-items:center;
+        }
+        .select-location .selected {
+            width:120px;
+            padding:0 10px;
+            flex:1;
+            height:30px;
+            font-size:14px;
+            display:flex;
+            align-items:center;
+        }
+        .select-location .selected:after {
+            content:'';
+            display:block;
+            width:0;
+            height:0;
+            margin-left:10px;
+            border-top:10px solid #333;
+            border-left:8px solid transparent;
+            border-right:8px solid transparent;
+        }
+        .select-location .location-list {
+            display:none;
+            position:absolute;
+            top:100%;
+            right:0;
+            border:1px solid #e1e1e1;
+            background:#f1f1f1;
+            z-index:1000;
+            list-style:none;
+        }
+        .select-location:hover .location-list {
+            display:block;
+        }
+        .location-depth2 {
+            width:600px;
+            margin-bottom:50px;
+            display:flex;
+            flex-wrap:wrap;
+            list-style:none;
+        }
+        .location-depth2 li button {
+            white-space:nowrap;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="select-location">
+        <h2>지역</h2>
+        <div id="selectedLocationName" class="selected"></div>
+        <ul id="selectDepth1" class="location-list"></ul>
+    </div>
+    <div class="select-depth2-location">
+        <ul id="selectDepth2" class="location-depth2"></ul>
+    </div>
+    <div id="mapContainer" class="map-container"></div>
+
+
+    <!-- geo json 데이터 로드 -->
+    <script>
+        // geo json 좌표계
+        // EPSG:5174 - 구형 한국 좌표계 (타원체: Bessel) (원점좌표: 127.0028902777778, 38)
+        // EPSG:5179 (UTM-K) - 도로명 지도 (타원체: GRS80, 표준) (원점좌표: 127.5, 38)
+        // EPSG:4326 - GPS 데이터 (타원체: WGS84) (원점좌표: -)
+        // EPSG:3857 - 구글 좌표계 (구글맵, Open Street Map, V World) (타원체: WGS84) (원점좌표: -)
+        let selectedCode = { depth1: undefined, depth2: undefined };
+        let geoData = {};
+        let locationCategory = {};
+        let geoMap = {};
+        let geoMapLayer = {};
+
+        const highlightMapColor = ['#dcdcdc', '#c6c9d8', '#d7deec', '#b8b6fd', '#f6b6e9'];
+
+        const mapContainer = L.map('mapContainer', {
+            zoomControl: false,
+            dragging: false,
+            animate: false,
+            zoomAnimation: false,
+            fadeAnimation: false,
+            touchZoom:false,
+            zoomAnimationThreshold: 30,
+            interactive: false,
+            bubblingMouseEvents: false,
+            scrollWheelZoom: false,
+            attributionControl:false
+        }).setView([37.56667, 126.97806], 13);
+
+        getGeoJsonData(`provinces`)
+        getGeoJsonData(`municipalities`)
+        // getGeoJsonData(`/json/geojson/skorea-municipalities-2018-geo.json`)
+        // getGeoJsonData(`/json/geojson/skorea-provinces-2018-geo.json`)
+
+        function getGeoJsonData(type) {
+            geoData[type] = {};
+            // geoJson 정보
+            // KOSTAT 2018
+            // https://github.com/southkorea/southkorea-maps
+            // urn:ogc:def:crs:OGC:1.3:CRS84
+            // WGS84, EPSG:4326(GPS 좌표계), UTF-8
+            return fetch(`/json/geojson/skorea-${type}-2018-geo.json`)
+                .then(res => res.json())
+                .then(d => {
+                    for (let i = 0; i < d.features.length; i++) {
+                        const geo = d.features[i];
+                        geoData[type][geo.properties.code] = geo;
+                    }
+                    classifyLocation(type)
+                });
+        }
+
+        function classifyLocation(type) {
+            locationCategory[type] = {};
+            for (let i = 0; i < Object.keys(geoData[type]).length; i++) {
+                const code = Object.keys(geoData[type])[i];
+                if (!locationCategory[type][code.substr(0, 2)]) locationCategory[type][code.substr(0, 2)] = [];
+                locationCategory[type][code.substr(0, 2)].push([geoData[type][code].properties.name, code]);
+
+                // 최초 선택지역 코드 저장
+                if (i == 0 && type == 'provinecs') selectedCode.depth1 = code;
+            }
+            
+            if (type == 'municipalities') {
+                // 지역 선택 목록 생성
+                initDepth1List();
+                // 최초 선택지역 하위지역 커드 저장; 구단위 코드 생성 이후 실행을 위한 위치 선정
+                changeCode(selectedCode.depth1);
+            }
+        }
+
+        function initDepth1List() {
+            let options = '';
+            // 지역 리스트 생성
+            for (let i = 0; i < Object.keys(locationCategory.provinces).length; i++) {
+                const code = Object.keys(locationCategory.provinces)[i];
+                const d = locationCategory.provinces[code];
+                
+                options += `<li location-code="${d[0][1]}">${d[0][0]}</li>`;
+
+                // 첫번재 지역으로 기본 선택 및 지도 세팅
+                if (i == 0) {
+                    changeMap(d[0][1]);
+                    $('#selectedLocationName').text(d[0][0]);
+                }
+            }
+
+            // 지역 목록 생성
+            document.querySelector(`#selectDepth1`).innerHTML = options;
+
+            // 목록 클릭 이벤트 생성
+            $(`#selectDepth1 li`).off().on('click', function () {
+                changeMap($(this).attr('location-code'));
+            })
+        }
+
+        function changeCode(code) {
+            if (code && !isNaN(code)) {
+                selectedCode.depth1 = code;
+
+                // 최초 선택 하위지역 코드 저장
+                selectedCode.depth2 = locationCategory.municipalities[code].map(d => d[1]);
+            }
+        }
+
+        function changeMap(code) {
+            // 시도 선택
+            if (code && !isNaN(code)) {
+                // 선택된 시도 드롭다운 적용
+                $('#selectedLocationName').text(locationCategory.provinces[code][0][0]);
+                
+                // 이전에 선택되었던 시도 벡터이미지 초기화
+                if (geoMapLayer[selectedCode.depth1]) mapContainer.removeLayer(geoMapLayer[selectedCode.depth1])
+                if (selectedCode.depth2 && selectedCode.depth2.length > 0) {
+                    for (let i = 0; i < selectedCode.depth2.length; i++) {
+                        if (geoMapLayer[selectedCode.depth2[i]]) mapContainer.removeLayer(geoMapLayer[selectedCode.depth2[i]]);
+                    }
+                }
+
+                // 선택된 시도 기준 벡터이미지 생성
+                generateMap('provinces', code);
+                generateMap('municipalities', code.substr(0,2));
+
+                // 전역변수 업데이트
+                changeCode(code)
+            }
+        }
+
+        function generateMap(type, code) {
+            if (type && code && !isNaN(code)) {
+                if (type == 'provinces') console.log(`${geoData[type][code].properties.name} --------------------------------------------------------`)
+
+                const codeArr = locationCategory[type][code].map(d => d[1]);
+                const mapStyle = {
+                    color: '#ffffff',
+                    weight: 2,
+                    fillOpacity: 1,
+                };
+                if (codeArr && codeArr.length > 0) {
+                    // 데이터 적용
+                    for (let i = 0; i < codeArr.length; i++) {
+                        const data_code = codeArr[i];
+                        
+                        // 레이어 생성 (초기화된 레이어 재생성)
+                        if (!geoMapLayer[data_code] || !geoMapLayer[data_code]._map) geoMapLayer[data_code] = L.geoJson().addTo(mapContainer);
+                    
+                        geoMapLayer[data_code].addData(geoData[type][data_code]);
+                        
+                        if (type == 'provinces') mapStyle.fillColor = highlightMapColor[0];
+                        if (type == 'municipalities') {
+                            const checkRandom = Math.random()*1000;
+                            if (150 < checkRandom && checkRandom < 250) mapStyle.fillColor = highlightMapColor[1];
+                            else if (400 < checkRandom && checkRandom < 500) mapStyle.fillColor = highlightMapColor[2];
+                            else if (650 < checkRandom && checkRandom < 750) mapStyle.fillColor = highlightMapColor[3];
+                            else if (900 < checkRandom && checkRandom < 1000) mapStyle.fillColor = highlightMapColor[4];
+                            else mapStyle.fillColor = highlightMapColor[0];
+                        }
+                        
+                        geoMapLayer[data_code].setStyle(mapStyle)
+                    }
+                    
+                    // 벡터 생성 영역 가운데 정렬
+                    mapContainer.fitBounds(geoMapLayer[code].getBounds())
+                }
+            }
+        }
+
+        function highlightMap(code) {
+            if (code && !isNaN(code)) {
+                // 구 지역 하이라이트
+            }
+        }
+    </script>
+    <script>
+        console.log(`geoData:`, geoData)
+    </script>
+    <!-- <script src="/js/secondary_demo/maptest_leaflet.js"></script> -->
+    <!-- <script src="/js/secondary_demo/maptest_openlayers.js"></script> -->
+    <!-- <script src="/js/secondary_demo/maptest_mapbox.js"></script> -->
+</body>
+
+</html>
